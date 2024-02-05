@@ -29,7 +29,7 @@ colors = {"ours": 'b', "Xu": 'g', "naive": 'r', "weak_oracle": 'c', "strong_orac
           "far": 'r'}
 rng = np.random.default_rng(seed=42)
 
-def save_exp(figs=None, data=None):
+def save_exp(figs=None):
     path = open_dir()
     if figs is None:
         fig_path = os.path.join(path, 'fig.pdf')
@@ -41,10 +41,6 @@ def save_exp(figs=None, data=None):
     cfg_path = os.path.join(path, 'cfg.json')
     with open(cfg_path, 'w') as fp:
         json.dump(config, fp, indent=4, default=lambda o: '<not serializable>')
-    if not data is None:
-        cfg_path = os.path.join(path, 'data')
-        file = open(cfg_path, 'wb')
-        pickle.dump(data, file)
     print(f"config:\n{json.dumps(config, indent=4, default=lambda o: '<not serializable>')}")
 
 def open_dir():
@@ -74,88 +70,6 @@ def run_algorithm(algo_name, setup, get_tau_alg=False):
     else:
         return err, best_task, tau_alg
 
-
-def n_growing(ax=None, rng=None):
-    if rng == None:
-        rng = np.random.default_rng(seed=42)
-    seeds = rng.integers(10000, size=20)
-    errors = {}
-    for algo_name in algorithms:
-        errors[algo_name] = []
-    n_vec = np.linspace(config["range_for_n_growing"][0], config["range_for_n_growing"][1], 100)
-    for n in tqdm(n_vec):
-        for algo_name in algorithms:
-            errors_for_n = []
-            for seed in seeds:
-                rng = np.random.default_rng(seed=seed)
-                s = Setup(t=100, n=int(n), rng=rng)
-                curr_error, curr_task = run_algorithm(algo_name, s)
-                errors_for_n.append(curr_error)
-            errors[algo_name].append(errors_for_n)
-    if ax is None:
-        ax = plt.subplot()
-        plot = True
-    else:
-        plot = False
-    for algo_name in algorithms:
-        np_array = np.log(np.array(errors[algo_name]))
-        mean_array = np_array.mean(axis=1)
-        std_array = np_array.std(axis=1)
-        ax.fill_between(n_vec, mean_array-std_array, mean_array+std_array, color=colors[algo_name], alpha=0.2)
-        ax.plot(n_vec, np_array.mean(axis=1), label=algo_name, color=colors[algo_name])
-    ax.legend(fontsize=10)
-    ax.set_xlabel('N')
-    ax.set_ylabel('$\log(\|\hat{\\theta}-\\theta\|^2)$')
-    if plot:
-        path = open_dir()
-        plt.show()
-        plt.savefig(fname=path)
-
-
-def t_growing():
-    rng = np.random.default_rng(seed=42)
-    seeds = rng.integers(10000, size=200)
-    errors = {}
-    for algo_name in algorithms:
-        errors[algo_name] = []
-    t_vec = np.linspace(100, 10000, 100)
-    for t in tqdm(t_vec):
-        for algo_name in algorithms:
-            errors_for_n = []
-            for seed in seeds:
-                rng = np.random.default_rng(seed=seed)
-                s = Setup(t=int(t),n=int(10e4), rng=rng)
-                curr_error, curr_task = run_algorithm(algo_name, s)
-                errors_for_n.append(curr_error)
-            errors[algo_name].append(errors_for_n)
-    ax = plt.subplot(2,1)
-    for algo_name in algorithms:
-        np_array = np.log(np.array(errors[algo_name]))
-        mean_array = np_array.mean(axis=1)
-        std_array = np_array.std(axis=1)
-        ax[1].fill_between(t_vec, mean_array-std_array, mean_array+std_array, color=colors[algo_name], alpha=0.2)
-        ax[1].plot(t_vec, np_array.mean(axis=1), label=algo_name, color=colors[algo_name])
-    ax.legend()
-    ax[1].set_xlabel('$T$')
-    ax[1].set_ylabel('$\log(\|\hat{\\theta}-\\theta\|^2)$')
-    path = open_dir()
-    ax[2] = utils.plot_betta_function()
-    plt.show()
-    plt.savefig(fname=path)
-
-
-def n_growing_beta_distribution():
-    plt.rcParams.update({'font.size': 14})
-    rng = np.random.default_rng(seed=42)
-    s = Setup(t=config["t_for_n_growing"], n=int(sum(config["range_for_n_growing"])/2), rng=rng)
-    fig, axes = plt.subplots(3)
-    fig.set_figheight(12)
-    fig.set_figwidth(10)
-    n_growing(axes[0], rng)
-    utils.plot_betta_function(s, ax=axes[1])
-    utils.plot_histogram(s, axes[2])
-    fig.tight_layout()
-    plt.show()
 
 
 def Q_func_changing():
@@ -268,22 +182,12 @@ def t_growing_different_locations(get_tau_alg=False):
 
 
 def power_gamma(separate_betta_precision=True):
-    data = []
     rng = np.random.default_rng(seed=42)
     seeds = rng.integers(10000, size=config["num_seeds"])
-    if separate_betta_precision:
-        # fig1 = plt.figure(1,layout='constrained')
-        # ax1 = fig1.add_subplot()
-        fig, axes = plt.subplots(1, 2, layout="constrained", figsize=(10,4))
-    else:
-        fig = plt.figure(layout='constrained')
-        subfigs = fig.subfigures(2, 2, wspace=0.01)
+    fig, axes = plt.subplots(1, 2, layout="constrained", figsize=(10,4))
     gamma_to_generate_betta = [1, 2, 3]
-    if separate_betta_precision:
-        gamma_vec = np.linspace(1,4,100)
-        precision_arr = []
-    else:
-        gamma_vec = [1,2,3,4]
+    gamma_vec = np.linspace(1,4,100)
+    precision_arr = []
     for gamma in tqdm(gamma_vec):
         def q_func(t):
             T = config["constant_t"]
@@ -301,39 +205,25 @@ def power_gamma(separate_betta_precision=True):
             _, _, tau_alg = run_algorithm("ours", s, True)
             # recall_arr.append(calc_recall_score(y_true=weak_oracle_set, tau_alg=tau_alg))
             precision_arr_gamma.append(calc_precision_score(y_true=weak_oracle_set, tau_alg=tau_alg))
-        if separate_betta_precision:
-            precision_arr.append(np.array(precision_arr_gamma).mean())
-            if gamma in gamma_to_generate_betta:
-                tau, beta, tau_min = s.beta_function_equal_source_variance(axes[0], plot=False)
-                if gamma == gamma_to_generate_betta[0]:
-                    axes[0].axvline(x=tau_min, color='red', label='$\\tau_{min}$')
-                    axes[0].plot(tau, tau, label="$\\beta(\\tau)=\\tau$")
-                axes[0].plot(tau, beta, label=f"$\gamma={gamma}$")
-        else:
-            axes = subfigs[int(gamma/2), gamma % 2].subplots(2, 1)
-            subfigs[int(gamma/2), gamma % 2].suptitle(f"$\gamma={gamma}$")
-            s.beta_function_equal_source_variance(axes[0])
-            axes[1].bar(x=['Precision', 'Recall'], height=[np.array(precision_arr_gamma).mean(), np.array(recall_arr).mean()])
-            axes[1].set_ylim(0,1.1)
-            axes[1].set_ylabel("Score$")
+        precision_arr.append(np.array(precision_arr_gamma).mean())
+        if gamma in gamma_to_generate_betta:
+            tau, beta, tau_min = s.beta_function_equal_source_variance(axes[0], plot=False)
+            if gamma == gamma_to_generate_betta[0]:
+                axes[0].axvline(x=tau_min, color='red', label='$\\tau_{min}$')
+                axes[0].plot(tau, tau, label="$\\beta(\\tau)=\\tau$")
+            tau_s, beta_s = utils.smooth_beta_func(tau,beta)
+            axes[0].plot(tau_s, beta_s, label=f"$\gamma={gamma}$")
     axes[0].legend()
     axes[0].set_xlabel("$\\tau$")
     axes[0].set_ylabel("$\\beta(\\tau$)")
-    if separate_betta_precision:
-        # fig2 = plt.figure(2)
-        # ax2 = fig2.add_subplot()
-        axes[1].plot(gamma_vec, precision_arr)
-        axes[1].set_ylabel("Precision")
-        axes[1].set_xlabel("$\gamma$")
-        save_exp()
-        plt.show()
-    else:
-        save_exp()
-        plt.show()
+    axes[1].plot(gamma_vec, precision_arr)
+    axes[1].set_ylabel("Precision")
+    axes[1].set_xlabel("$\gamma$")
+    save_exp()
+    plt.show()
 
 
 def heat_map():
-    data = []
     rng = np.random.default_rng(seed=42)
     seeds = rng.integers(10000, size=config["num_seeds"])
     tasks_vectors = 10*np.array(utils.generate_vectors(10))
@@ -360,14 +250,46 @@ def heat_map():
     mask = np.ones_like(map) - np.tril(np.ones_like(map))
     ax = plt.subplot()
     # ax.set_title("$Simulation\ 3$")
-    sb.heatmap(np.flipud(map), mask=mask,ax=ax)
-    data.append(np.flipud(map))
-    ax.set_xlabel("Far Tasks")
-    ax.set_ylabel('Close Tasks')
+    sb.heatmap(np.flipud(map), mask=mask,ax=ax, cbar_kws={"label":"$\log(\|\hat{\\theta}-\\theta\|^2)$"})
+    ax.set_xlabel("$T_{far}$")
+    ax.set_ylabel('$T_{close}$')
     ax.set_xticklabels(np.arange(0,101,10))
     ax.set_yticklabels(np.arange(0,101,10)[::-1])
-    save_exp(data=data)
+    save_exp()
     plt.show()
+
+def create_beta_func_fig_1():
+    T = 1000
+    t_vec = np.arange(1, T)
+
+    Q_sq_a = 2 / 100 * t_vec ** (1 / 2)
+    Q_sq_a = np.sort(Q_sq_a)
+
+    Q_sq_b = 4 / 100 * t_vec ** (1 / 2)
+    Q_sq_b = np.sort(Q_sq_b)
+
+    tau_min = 0.2
+
+    tau = np.arange(0, 1, 1 / T)
+
+    beta_a = np.zeros_like(tau)
+    beta_b = np.zeros_like(tau)
+
+    for i in range(tau.shape[0]):
+        tau_cur = max(tau_min, tau[i]);
+
+        beta_a[i] = sum(Q_sq_a <= tau_cur) / T
+        beta_b[i] = sum(Q_sq_b <= tau_cur) / T
+
+    ax = plt.subplot()
+    ax.plot(tau, beta_a,'b')
+    ax.plot(tau, beta_b,'r')
+    ax.plot(tau, tau,'y--')
+    ax.set_xlabel("$\\tau$")
+    ax.set_ylabel("$\\beta_{\delta}(\\tau)$")
+    save_exp()
+    plt.show()
+
 
 
 
@@ -389,6 +311,7 @@ def main_with_parser():
         utils.plot_histogram(s)
 
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-exp_type', dest='exp',default="", help='Which experiment to run')
@@ -408,5 +331,7 @@ if __name__ == '__main__':
         power_gamma()
     elif exp_type == 'heat_map':
         heat_map()
+    elif exp_type == 'create_beta_func_fig_1':
+        create_beta_func_fig_1()
     else:
         print('unfamiliar experiment type')

@@ -6,7 +6,7 @@ from Algorithms import set_r_bar
 from matplotlib.ticker import PercentFormatter
 import sklearn.metrics as metrics
 from itertools import product
-
+from scipy.interpolate import make_interp_spline
 
 def constant_q_func(t):
     res1 = 0.2*np.ones(10)
@@ -124,83 +124,6 @@ class Setup:
             return (tau, beta, tau_min)
 
 
-def plot_betta_function(s, nu=1, ax=None):
-    tau_len = 1000
-    if config["equal_source_variance"]:
-        beta_func, tau, tau_min = beta_function_equal_source_variance(s, nu=1, tau_len=1000)
-    else:
-        beta_func, tau = beta_function_unequal_source_variance(s, nu=1, tau_len=1000)
-        tau_min=0
-    if ax is None:
-        ax = plt.subplot()
-        plot = True
-    else:
-        plot = False
-    ax.plot(tau, beta_func, label='$\\beta_{\delta}(\\tau)$')
-    ax.plot(tau, tau,linestyle='dashed',label='linear')
-    ax.axvline(x=tau_min, label='$\\tau_{min}$', linestyle='dotted', color='r')
-    ax.set_xlabel('$\\tau$')
-    ax.set_ylabel('$\\beta(\\tau)$')
-    ax.legend()
-    # path = open_dir()
-    if plot:
-        plt.show()
-
-
-
-
-def beta_function_unequal_source_variance(s, nu=1,tau_len=1000):
-    tau = np.linspace(0, 1, tau_len)
-    d_sigma_vec = np.array([task.Var.sum() for task in s.Tasks[1:]])
-    d_sigma_0 = s.Tasks[0].Var.sum()
-    d_sigma_bar = d_sigma_vec.mean()
-    tau_min = np.ceil(d_sigma_0/d_sigma_bar)/s.T
-    tau1 = tau[tau > tau_min]
-    tau1_len = tau1.shape[0]
-    # constructing mask for adjusted d_sigma_bar matrix
-    mask = np.tile(np.arange(1, s.T+1), (tau1_len, 1))
-    masker = np.tile((s.T * tau1).astype(int), (s.T, 1)).T
-    mask[mask > masker] = 0
-    mask[mask != 0] = 1
-    adjusted_d_sigma_bar_vec = ((np.tile(d_sigma_vec, (tau1_len, 1)))*mask).sum(axis=1)/mask.sum(axis=1) # First to last
-    r_bar = set_r_bar(s, config['beta_bar'])
-    delta_bar = config['delta'] / (s.T * r_bar + 2)
-    c = np.log(2 / delta_bar)
-    threshold = (c / nu) * ((s.T * tau1).astype(int) * adjusted_d_sigma_bar_vec / s.N)
-    Q_vec = np.array([task.Q for task in s.Tasks[1:]])
-    threshold_mat = np.tile(threshold, (len(Q_vec), 1)).T
-    Q_mat = np.tile(Q_vec, (tau1_len, 1))
-    beta_func1 = (Q_mat <= threshold_mat).sum(axis=1)/s.T
-    beta_func2_len = (tau[tau <= tau_min]).shape[0]
-    beta_func2 = np.array(beta_func2_len*[(c / nu) * (d_sigma_0 / s.N)])
-    beta_func = np.concatenate((beta_func2, beta_func1))
-    return beta_func, tau
-
-
-def plot_histogram(s, ax=None):
-    if ax is None:
-        ax = plt.subplot()
-        plot = True
-    else:
-        plot = False
-    c_delta = np.log(2/config['delta'])
-    print(f"plot_histogram, threshold:{c_delta*s.Tasks[0].Var.sum()/s.N}")
-    Q_vec_normed = np.array([task.Q for task in s.Tasks[1:]])/(c_delta*s.Tasks[0].Var.sum()/s.N)
-    bin_edges = np.linspace(min(Q_vec_normed),max(Q_vec_normed),100)
-    # Q_vec = np.array([task.Q for task in s.Tasks[1:]])
-    ax.hist(Q_vec_normed,bins=bin_edges, weights=np.ones_like(Q_vec_normed)/Q_vec_normed.shape[0])
-    #ax.plot(Q_vec, np.full(Q_vec.shape[0], -0.01), "+k")
-    ax.set_xlabel("$\\frac{Q^2}{c_{\delta}\\frac{d\sigma_0^2}{N}}$", fontsize=20)
-    ax.yaxis.set_major_formatter(PercentFormatter(1))
-    target_err = s.Tasks[0].Var.sum()/s.N
-    # ax.axvline(x=target_err, color='r', label='Target expected error')
-    ax.axvline(x=1, color='r', label='Target expected error')
-    ax.legend()
-    ax.set_xticks(bin_edges[::10])
-    # ax.set_ylim([0,0.3])
-    if plot:
-        plt.show()
-
 
 
 def get_cmap(n, name='hsv'):
@@ -255,3 +178,9 @@ def generate_vectors(sum_value):
             vectors.append(combination)
     return vectors
 
+def smooth_beta_func(x,y):
+    cs = make_interp_spline(x, y)
+    xx = np.linspace(x[0], x[-1], 10)
+    yy = [cs(x) for x in xx]
+    # yy = np.interp(xx, x, y)
+    return xx, yy
